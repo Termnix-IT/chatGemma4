@@ -414,7 +414,7 @@ function App() {
             <p className="eyebrow">Local LLM</p>
             <h1>chatGemma</h1>
           </div>
-          <button className="icon-button mobile-only" onClick={() => setSidebarOpen(false)} aria-label="会話一覧を閉じる">
+          <button className="icon-button mobile-only" onClick={() => setSidebarOpen(false)} aria-label="サイドバーを閉じる">
             <PanelLeftClose size={18} />
           </button>
         </div>
@@ -435,7 +435,6 @@ function App() {
                 markActivity();
                 setActiveConversationId(conversation.id);
                 setWorkspaceView("chat");
-                setSidebarOpen(false);
               }}
             >
               <span>{conversation.title}</span>
@@ -450,7 +449,6 @@ function App() {
             onClick={() => {
               markActivity();
               setWorkspaceView("help");
-              setSidebarOpen(false);
             }}
           >
             <HelpCircle size={18} />

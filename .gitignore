@@ -38,3 +38,6 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Local planning notes
+FUTURE_IDEAS.md
