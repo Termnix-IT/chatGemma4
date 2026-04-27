@@ -1,10 +1,9 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   AlertCircle,
   BookOpen,
-  Bot,
   CloudSun,
   HelpCircle,
   Keyboard,
@@ -17,7 +16,6 @@ import {
   SlidersHorizontal,
   Square,
   Trash2,
-  Wrench,
   User
 } from "lucide-react";
 import type { ChatMessage, ChatOptions, ChatRequest, ChatStreamEvent, HealthResponse } from "../../shared/types";
@@ -46,6 +44,10 @@ type WorkspaceView = "chat" | "help";
 const CONVERSATIONS_KEY = "chatgemma.conversations.v1";
 const ACTIVE_CONVERSATION_KEY = "chatgemma.activeConversation.v1";
 const SETTINGS_KEY = "chatgemma.settings.v1";
+const MASCOT_IDLE_DELAY_MS = 20_000;
+const MASCOT_AVATAR_SHEET_SRC = "/mascot/bunny-bot-sheet.png";
+const MASCOT_CHAT_JUMP_SHEET_SRC = "/mascot/bunny-bot-chat-jump-sheet.png";
+const MASCOT_MAIN_SRC = "/mascot/bunny-bot-main.png";
 
 const defaultSettings: AppSettings = {
   model: "gemma4:latest",
@@ -63,8 +65,15 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 760);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("chat");
+  const [lastActivityAt, setLastActivityAt] = useState(() => Date.now());
+  const [isMascotIdle, setIsMascotIdle] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  const markActivity = useCallback(() => {
+    setLastActivityAt(Date.now());
+    setIsMascotIdle(false);
+  }, []);
 
   const activeConversation = useMemo(() => {
     return conversations.find((conversation) => conversation.id === activeConversationId) ?? conversations[0];
@@ -97,6 +106,31 @@ function App() {
   }, []);
 
   useEffect(() => {
+    window.addEventListener("keydown", markActivity);
+    window.addEventListener("pointerdown", markActivity);
+    window.addEventListener("touchstart", markActivity);
+
+    return () => {
+      window.removeEventListener("keydown", markActivity);
+      window.removeEventListener("pointerdown", markActivity);
+      window.removeEventListener("touchstart", markActivity);
+    };
+  }, [markActivity]);
+
+  useEffect(() => {
+    if (workspaceView !== "chat" || isGenerating) {
+      setIsMascotIdle(false);
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setIsMascotIdle(true);
+    }, MASCOT_IDLE_DELAY_MS);
+
+    return () => window.clearTimeout(timerId);
+  }, [isGenerating, lastActivityAt, workspaceView]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [activeConversation?.messages, isGenerating]);
 
@@ -125,6 +159,7 @@ function App() {
   }
 
   function startNewConversation() {
+    markActivity();
     const conversation = createConversation();
     setConversations((current) => [conversation, ...current]);
     setActiveConversationId(conversation.id);
@@ -133,6 +168,7 @@ function App() {
   }
 
   function deleteConversation(id: string) {
+    markActivity();
     setConversations((current) => {
       const next = current.filter((conversation) => conversation.id !== id);
 
@@ -148,6 +184,7 @@ function App() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    markActivity();
 
     const content = input.trim();
     if (!content || isGenerating || !activeConversation) {
@@ -162,6 +199,8 @@ function App() {
   }
 
   async function retryLastMessage() {
+    markActivity();
+
     if (!activeConversation || isGenerating) {
       return;
     }
@@ -179,6 +218,7 @@ function App() {
   }
 
   async function sendMessages(conversation: Conversation, nextMessages: ChatMessage[]) {
+    markActivity();
     const assistantMessage = createMessage("assistant", "");
     const conversationId = conversation.id;
     const messagesWithPlaceholder = [...nextMessages, assistantMessage];
@@ -252,6 +292,7 @@ function App() {
   }
 
   function stopGenerating() {
+    markActivity();
     abortRef.current?.abort();
   }
 
@@ -391,6 +432,7 @@ function App() {
                 workspaceView === "chat" && conversation.id === activeConversation?.id ? "is-active" : ""
               }`}
               onClick={() => {
+                markActivity();
                 setActiveConversationId(conversation.id);
                 setWorkspaceView("chat");
                 setSidebarOpen(false);
@@ -406,12 +448,13 @@ function App() {
           <button
             className={`help-button ${workspaceView === "help" ? "is-active" : ""}`}
             onClick={() => {
+              markActivity();
               setWorkspaceView("help");
               setSidebarOpen(false);
             }}
           >
             <HelpCircle size={18} />
-            <span>Help</span>
+            <span>ヘルプ</span>
           </button>
         </div>
       </aside>
@@ -457,7 +500,7 @@ function App() {
                     ) : message.role === "tool" ? (
                       <CloudSun size={17} />
                     ) : (
-                      <Bot size={17} />
+                      <PixelMascot variant="avatar" />
                     )}
                   </div>
                   <div className="message-body">
@@ -472,7 +515,7 @@ function App() {
                 </div>
               ) : (
                 <div className="empty-state">
-                  <Bot size={40} />
+                  <PixelMascot variant="empty" />
                   <h2>Gemma4 と会話を始める</h2>
                   <p>ローカルの Ollama モデルに接続して、日本語でそのまま質問できます。</p>
                 </div>
@@ -480,6 +523,11 @@ function App() {
             </div>
 
             <form className="composer" onSubmit={handleSubmit}>
+              {isMascotIdle ? (
+                <div className="idle-mascot" aria-hidden="true">
+                  <PixelMascot variant="idle" />
+                </div>
+              ) : null}
               <div className="composer-actions">
                 <button
                   type="button"
@@ -506,7 +554,10 @@ function App() {
               <div className="input-row">
                 <textarea
                   value={input}
-                  onChange={(event) => setInput(event.target.value)}
+                  onChange={(event) => {
+                    markActivity();
+                    setInput(event.target.value);
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();
@@ -547,7 +598,10 @@ function App() {
           <span>Model</span>
           <input
             value={settings.model}
-            onChange={(event) => setSettings((current) => ({ ...current, model: event.target.value }))}
+            onChange={(event) => {
+              markActivity();
+              setSettings((current) => ({ ...current, model: event.target.value }));
+            }}
           />
         </label>
 
@@ -559,9 +613,10 @@ function App() {
             max="2"
             step="0.1"
             value={settings.temperature}
-            onChange={(event) =>
-              setSettings((current) => ({ ...current, temperature: Number(event.target.value) }))
-            }
+            onChange={(event) => {
+              markActivity();
+              setSettings((current) => ({ ...current, temperature: Number(event.target.value) }));
+            }}
           />
         </label>
 
@@ -569,7 +624,10 @@ function App() {
           <span>System prompt</span>
           <textarea
             value={settings.systemPrompt}
-            onChange={(event) => setSettings((current) => ({ ...current, systemPrompt: event.target.value }))}
+            onChange={(event) => {
+              markActivity();
+              setSettings((current) => ({ ...current, systemPrompt: event.target.value }));
+            }}
             rows={8}
           />
         </label>
@@ -583,15 +641,35 @@ function App() {
   );
 }
 
+function PixelMascot({ variant }: { variant: "avatar" | "empty" | "idle" }) {
+  if (variant === "empty") {
+    return (
+      <span aria-hidden="true" className="pixel-mascot pixel-mascot-empty">
+        <img src={MASCOT_MAIN_SRC} alt="" draggable={false} />
+      </span>
+    );
+  }
+
+  const source = variant === "idle" ? MASCOT_CHAT_JUMP_SHEET_SRC : MASCOT_AVATAR_SHEET_SRC;
+
+  return (
+    <span
+      aria-hidden="true"
+      className={`pixel-mascot pixel-mascot-sprite pixel-mascot-${variant}`}
+      style={{ backgroundImage: `url(${source})` }}
+    />
+  );
+}
+
 function HelpPage() {
   return (
     <div className="help-surface">
       <section className="help-hero">
-        <p className="eyebrow">Help</p>
+        <p className="eyebrow">ヘルプ</p>
         <h2>chatGemma の使い方</h2>
         <p>
           chatGemma は Ollama 上の Gemma4 と会話するためのローカルチャット画面です。
-          会話履歴はこのブラウザに保存されます。
+          会話履歴と設定はこのブラウザに保存されます。
         </p>
       </section>
 
@@ -616,8 +694,21 @@ function HelpPage() {
         <div className="feature-list">
           <p>会話一覧から履歴を切り替えられます。</p>
           <p>会話履歴と設定はブラウザに自動保存されます。</p>
-          <p>設定から model、temperature、system prompt を調整できます。</p>
+          <p>天気について質問すると、ツールを使って現在の天気情報を取得できます。</p>
           <p>Ollama 接続状態は上部バーで確認できます。</p>
+        </div>
+      </section>
+
+      <section className="help-section" aria-labelledby="help-settings">
+        <div className="help-section-heading">
+          <Settings size={20} />
+          <h3 id="help-settings">Model controls</h3>
+        </div>
+        <div className="feature-list">
+          <p>Model では Ollama で使用するモデル名を指定します。</p>
+          <p>Temperature では回答の自由度を調整できます。低いほど安定し、高いほど多様になります。</p>
+          <p>System prompt では会話全体に適用する振る舞いや回答方針を指定できます。</p>
+          <p>変更した設定はブラウザに保存され、次回以降も引き継がれます。</p>
         </div>
       </section>
 
@@ -638,14 +729,13 @@ function HelpPage() {
         </dl>
       </section>
 
-      <section className="help-section" aria-labelledby="help-next">
+      <section className="help-section" aria-labelledby="help-weather">
         <div className="help-section-heading">
-          <Wrench size={20} />
-          <h3 id="help-next">今後追加予定の拡張</h3>
+          <CloudSun size={20} />
+          <h3 id="help-weather">天気情報の取得</h3>
         </div>
         <p className="help-copy">
-          Function Calling / Tool Calling 用の型はすでに共有層にあります。
-          次フェーズではツール定義、実行ログ、AI エージェント風の実行ループを追加できます。
+          「東京の天気を教えて」のように場所を含めて質問すると、観測時刻、気温、状態、風速、風向を取得して表示します。
         </p>
       </section>
     </div>

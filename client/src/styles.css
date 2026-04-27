@@ -296,10 +296,16 @@ h2 {
   display: grid;
   width: 36px;
   height: 36px;
+  overflow: hidden;
   place-items: center;
   border-radius: 8px;
   color: #ffffff;
   background: #20261f;
+}
+
+.message-row.assistant .avatar {
+  background: transparent;
+  box-shadow: none;
 }
 
 .message-row.user .avatar {
@@ -407,6 +413,87 @@ h2 {
   max-width: 420px;
   margin: 0;
   line-height: 1.7;
+}
+
+.pixel-mascot {
+  display: inline-grid;
+  place-items: center;
+  overflow: hidden;
+  flex: 0 0 auto;
+  user-select: none;
+}
+
+.pixel-mascot-sprite {
+  --mascot-size: 32px;
+  --mascot-row: 0px;
+  --mascot-rows: 3;
+
+  width: var(--mascot-size);
+  height: var(--mascot-size);
+  background-repeat: no-repeat;
+  background-position: 0 var(--mascot-row);
+  background-size: calc(var(--mascot-size) * 4) calc(var(--mascot-size) * var(--mascot-rows));
+  image-rendering: pixelated;
+}
+
+.pixel-mascot-avatar {
+  --mascot-size: 36px;
+  --mascot-row: 0px;
+
+  animation:
+    mascot-sprite-x 1.15s steps(4) infinite,
+    mascot-avatar-bob 3.8s ease-in-out infinite;
+}
+
+.pixel-mascot-empty {
+  width: clamp(72px, 8vw, 88px);
+  overflow: visible;
+}
+
+.pixel-mascot-empty img {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+}
+
+.composer {
+  position: relative;
+}
+
+.idle-mascot {
+  position: absolute;
+  right: 34px;
+  top: 25px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.pixel-mascot-idle {
+  --mascot-size: 34px;
+  --mascot-row: 0px;
+  --mascot-rows: 1;
+
+  border-radius: 8px;
+  background-color: transparent;
+  animation: mascot-sprite-x 0.86s steps(4) infinite;
+}
+
+@keyframes mascot-sprite-x {
+  to {
+    background-position-x: calc(var(--mascot-size) * -4);
+  }
+}
+
+@keyframes mascot-avatar-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-2px);
+  }
 }
 
 .help-surface {
@@ -530,7 +617,7 @@ h2 {
 }
 
 .composer-actions {
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
 }
 
@@ -551,6 +638,8 @@ h2 {
 }
 
 .input-row {
+  position: relative;
+  z-index: 3;
   gap: 10px;
   padding: 9px;
   border: 1px solid #d8d4c9;
@@ -706,12 +795,25 @@ h2 {
     height: 32px;
   }
 
+  .pixel-mascot-avatar {
+    --mascot-size: 32px;
+  }
+
   .message-row.user .message-body {
     max-width: 100%;
   }
 
   .composer {
     padding: 12px;
+  }
+
+  .idle-mascot {
+    right: 32px;
+    top: 25px;
+  }
+
+  .pixel-mascot-idle {
+    --mascot-size: 32px;
   }
 
   .composer-actions {
@@ -733,5 +835,14 @@ h2 {
 
   .shortcut-list div {
     gap: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pixel-mascot-avatar,
+  .pixel-mascot-empty,
+  .idle-mascot,
+  .pixel-mascot-idle {
+    animation: none;
   }
 }
