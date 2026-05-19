@@ -1,4 +1,5 @@
 import type { ToolCall, ToolDefinition, ToolResult } from "../../../shared/types.js";
+import { datetimeToolDefinition, executeDatetimeTool } from "./datetime.js";
 import { executeWeatherTool, weatherToolDefinition } from "./weather.js";
 
 type ToolEntry = {
@@ -7,6 +8,10 @@ type ToolEntry = {
 };
 
 const toolEntries: ToolEntry[] = [
+  {
+    definition: datetimeToolDefinition,
+    execute: executeDatetimeTool
+  },
   {
     definition: weatherToolDefinition,
     execute: executeWeatherTool
