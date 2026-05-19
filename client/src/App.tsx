@@ -1262,6 +1262,8 @@ function formatWeatherForecastToolResult(content: string) {
       location?: string;
       days?: Array<{
         date?: string;
+        dateLabel?: string;
+        weekday?: string;
         maxTemperatureCelsius?: number;
         minTemperatureCelsius?: number;
         precipitationProbabilityPercent?: number;
@@ -1272,9 +1274,12 @@ function formatWeatherForecastToolResult(content: string) {
     const lines = [`${forecast.location ?? "Location"} の天気予報を取得しました。`];
 
     for (const day of forecast.days ?? []) {
+      const fallbackDateLabel = [day.date, day.weekday].filter(Boolean).join(" ");
+      const dateLabel = day.dateLabel ?? (fallbackDateLabel || "unknown");
+
       lines.push(
         [
-          day.date ?? "unknown",
+          dateLabel,
           `最高 ${day.maxTemperatureCelsius ?? "unknown"} ℃`,
           `最低 ${day.minTemperatureCelsius ?? "unknown"} ℃`,
           `降水確率 ${day.precipitationProbabilityPercent ?? "unknown"}%`,
