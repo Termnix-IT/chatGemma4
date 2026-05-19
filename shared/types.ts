@@ -12,8 +12,11 @@ export interface ChatOptions {
   temperature: number;
 }
 
+export type ChatMode = "chat" | "agent";
+
 export interface ChatRequest {
   conversationId: string;
+  mode: ChatMode;
   model: string;
   messages: ChatMessage[];
   options: ChatOptions;

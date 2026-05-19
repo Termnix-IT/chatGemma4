@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
+  ChatMode,
   ChatMessage,
   ChatOptions,
   ChatRequest,
@@ -67,7 +68,15 @@ app.post("/api/chat", async (req, res) => {
       "X-Accel-Buffering": "no"
     });
 
-    await runToolLoop(model, normalizeMessages(body.messages ?? []), options, res);
+    const mode = body.mode ?? "chat";
+    const messages = normalizeMessages(body.messages ?? []);
+
+    if (mode === "agent") {
+      await runToolLoop(model, messages, options, res);
+      return;
+    }
+
+    await runChatPass(model, messages, options, res);
   } catch (error) {
     if (!res.headersSent) {
       res.status(502).json({
@@ -159,6 +168,10 @@ function validateChatRequest(body: Partial<ChatRequest>): string | null {
     return "conversationId is required";
   }
 
+  if (body.mode && !["chat", "agent"].includes(body.mode)) {
+    return "mode is invalid";
+  }
+
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
     return "messages must contain at least one message";
   }
@@ -189,6 +202,16 @@ function normalizeMessages(messages: ChatMessage[]): OllamaMessage[] {
     }));
 }
 
+async function runChatPass(
+  model: string,
+  messages: OllamaMessage[],
+  options: ChatOptions,
+  res: express.Response
+) {
+  await streamOllamaPass(model, messages, options, res, "chat");
+  res.end();
+}
+
 async function runToolLoop(
   model: string,
   initialMessages: OllamaMessage[],
@@ -199,7 +222,7 @@ async function runToolLoop(
   const maxToolRounds = 2;
 
   for (let round = 0; round <= maxToolRounds; round += 1) {
-    const result = await streamOllamaPass(model, messages, options, res);
+    const result = await streamOllamaPass(model, messages, options, res, "agent");
 
     if (result.content || result.toolCalls.length > 0) {
       messages.push({
@@ -246,18 +269,30 @@ async function streamOllamaPass(
   model: string,
   messages: OllamaMessage[],
   options: ChatOptions,
-  res: express.Response
+  res: express.Response,
+  mode: ChatMode
 ) {
+  const requestBody: {
+    model: string;
+    messages: OllamaMessage[];
+    stream: boolean;
+    tools?: [typeof weatherToolDefinition];
+    options: ChatOptions;
+  } = {
+    model,
+    messages,
+    stream: true,
+    options
+  };
+
+  if (mode === "agent") {
+    requestBody.tools = [weatherToolDefinition];
+  }
+
   const ollamaResponse = await fetch(`${ollamaBaseUrl}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      messages,
-      stream: true,
-      tools: [weatherToolDefinition],
-      options
-    })
+    body: JSON.stringify(requestBody)
   });
 
   if (!ollamaResponse.ok || !ollamaResponse.body) {

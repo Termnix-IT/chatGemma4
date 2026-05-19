@@ -176,6 +176,18 @@ h2 {
   color: #929b8c;
 }
 
+.conversation-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.conversation-meta span:last-child {
+  min-width: 44px;
+  text-align: right;
+}
+
 .sidebar-footer {
   display: grid;
   gap: 8px;
@@ -643,6 +655,7 @@ h2 {
 .composer-actions {
   justify-content: flex-start;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .text-button {
@@ -659,6 +672,38 @@ h2 {
 
 .text-button.danger {
   color: #8b332b;
+}
+
+.mode-toggle {
+  display: inline-flex;
+  min-height: 34px;
+  overflow: hidden;
+  border: 1px solid #d8d4c9;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.mode-toggle button {
+  display: inline-flex;
+  min-width: 112px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  padding: 0 11px;
+  color: #4f5a51;
+  background: transparent;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.mode-toggle button + button {
+  border-left: 1px solid #d8d4c9;
+}
+
+.mode-toggle button.is-active {
+  color: #111711;
+  background: #e1c167;
 }
 
 .input-row {
@@ -844,7 +889,16 @@ h2 {
   }
 
   .composer-actions {
-    justify-content: space-between;
+    justify-content: flex-start;
+  }
+
+  .mode-toggle {
+    width: 100%;
+  }
+
+  .mode-toggle button {
+    flex: 1;
+    min-width: 0;
   }
 
   .help-surface {

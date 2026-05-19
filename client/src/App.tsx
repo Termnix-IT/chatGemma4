@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   AlertCircle,
+  Bot,
   BookOpen,
   CloudSun,
   HelpCircle,
@@ -18,11 +19,12 @@ import {
   Trash2,
   User
 } from "lucide-react";
-import type { ChatMessage, ChatOptions, ChatRequest, ChatStreamEvent, HealthResponse } from "../../shared/types";
+import type { ChatMessage, ChatMode, ChatOptions, ChatRequest, ChatStreamEvent, HealthResponse } from "../../shared/types";
 
 type Conversation = {
   id: string;
   title: string;
+  mode: ChatMode;
   messages: ChatMessage[];
   createdAt: string;
   updatedAt: string;
@@ -167,6 +169,21 @@ function App() {
     setInput("");
   }
 
+  function updateConversationMode(id: string, mode: ChatMode) {
+    markActivity();
+    setConversations((current) =>
+      current.map((conversation) =>
+        conversation.id === id
+          ? {
+              ...conversation,
+              mode,
+              updatedAt: new Date().toISOString()
+            }
+          : conversation
+      )
+    );
+  }
+
   function deleteConversation(id: string) {
     markActivity();
     setConversations((current) => {
@@ -233,6 +250,7 @@ function App() {
     try {
       const request: ChatRequest = {
         conversationId,
+        mode: conversation.mode ?? "chat",
         model: settings.model,
         messages: buildPromptMessages(nextMessages, settings.systemPrompt),
         options: { temperature: settings.temperature } satisfies ChatOptions
@@ -438,7 +456,10 @@ function App() {
               }}
             >
               <span>{conversation.title}</span>
-              <small>{formatDate(conversation.updatedAt)}</small>
+              <small className="conversation-meta">
+                <span>{formatDate(conversation.updatedAt)}</span>
+                <span>{conversation.mode === "agent" ? "Agent" : "Chat"}</span>
+              </small>
             </button>
           ))}
         </nav>
@@ -527,6 +548,30 @@ function App() {
                 </div>
               ) : null}
               <div className="composer-actions">
+                {activeConversation ? (
+                  <div className="mode-toggle" aria-label="チャットモード">
+                    <button
+                      type="button"
+                      className={activeConversation.mode !== "agent" ? "is-active" : ""}
+                      onClick={() => updateConversationMode(activeConversation.id, "chat")}
+                      disabled={isGenerating}
+                      aria-pressed={activeConversation.mode !== "agent"}
+                    >
+                      <MessageSquarePlus size={15} />
+                      チャット
+                    </button>
+                    <button
+                      type="button"
+                      className={activeConversation.mode === "agent" ? "is-active" : ""}
+                      onClick={() => updateConversationMode(activeConversation.id, "agent")}
+                      disabled={isGenerating}
+                      aria-pressed={activeConversation.mode === "agent"}
+                    >
+                      <Bot size={15} />
+                      エージェント
+                    </button>
+                  </div>
+                ) : null}
                 <button
                   type="button"
                   className="text-button"
@@ -632,7 +677,7 @@ function App() {
 
         <div className="tooling-note">
           <AlertCircle size={18} />
-          <p>Tool Calling の型は共有層に用意済みです。実行ループは次フェーズで追加します。</p>
+          <p>Tool Calling はエージェントモードでのみ有効です。通常チャットではツールを使わずに回答します。</p>
         </div>
       </aside>
     </main>
@@ -692,7 +737,8 @@ function HelpPage() {
         <div className="feature-list">
           <p>会話一覧から履歴を切り替えられます。</p>
           <p>会話履歴と設定はブラウザに自動保存されます。</p>
-          <p>天気について質問すると、ツールを使って現在の天気情報を取得できます。</p>
+          <p>通常チャットではモデルとの会話だけを行います。</p>
+          <p>エージェントモードではTool Callingを使って追加情報を取得できます。</p>
           <p>Ollama 接続状態は上部バーで確認できます。</p>
         </div>
       </section>
@@ -733,7 +779,7 @@ function HelpPage() {
           <h3 id="help-weather">天気情報の取得</h3>
         </div>
         <p className="help-copy">
-          「東京の天気を教えて」のように場所を含めて質問すると、観測時刻、気温、状態、風速、風向を取得して表示します。
+          エージェントモードで「東京の天気を教えて」のように場所を含めて質問すると、観測時刻、気温、状態、風速、風向を取得して表示します。
         </p>
       </section>
     </div>
@@ -757,10 +803,18 @@ function loadConversations(): Conversation[] {
 
   try {
     const parsed = JSON.parse(raw) as Conversation[];
-    return parsed.length > 0 ? parsed : [createConversation()];
+    return parsed.length > 0 ? parsed.map(normalizeConversation) : [createConversation()];
   } catch {
     return [createConversation()];
   }
+}
+
+function normalizeConversation(conversation: Conversation): Conversation {
+  return {
+    ...conversation,
+    mode: conversation.mode === "agent" ? "agent" : "chat",
+    messages: Array.isArray(conversation.messages) ? conversation.messages : []
+  };
 }
 
 function loadActiveId() {
@@ -787,6 +841,7 @@ function createConversation(): Conversation {
   return {
     id: crypto.randomUUID(),
     title: "New chat",
+    mode: "chat",
     messages: [],
     createdAt: now,
     updatedAt: now
