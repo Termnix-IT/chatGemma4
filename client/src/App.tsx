@@ -17,9 +17,19 @@ import {
   SlidersHorizontal,
   Square,
   Trash2,
-  User
+  User,
+  Wrench
 } from "lucide-react";
-import type { ChatMessage, ChatMode, ChatOptions, ChatRequest, ChatStreamEvent, HealthResponse } from "../../shared/types";
+import type {
+  AgentToolSummary,
+  AgentToolsResponse,
+  ChatMessage,
+  ChatMode,
+  ChatOptions,
+  ChatRequest,
+  ChatStreamEvent,
+  HealthResponse
+} from "../../shared/types";
 
 type Conversation = {
   id: string;
@@ -65,6 +75,7 @@ function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [status, setStatus] = useState<Status>({ tone: "idle", text: "Ollama 接続を確認中" });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [agentTools, setAgentTools] = useState<AgentToolSummary[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 760);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("chat");
   const [lastActivityAt, setLastActivityAt] = useState(() => Date.now());
@@ -105,6 +116,7 @@ function App() {
 
   useEffect(() => {
     void refreshHealth();
+    void refreshAgentTools();
   }, []);
 
   useEffect(() => {
@@ -157,6 +169,16 @@ function App() {
       setStatus({ tone: "error", text: "Ollama に接続できません" });
     } catch {
       setStatus({ tone: "error", text: "API サーバーに接続できません" });
+    }
+  }
+
+  async function refreshAgentTools() {
+    try {
+      const response = await fetch("/api/tools");
+      const data = (await response.json()) as AgentToolsResponse;
+      setAgentTools(data.tools);
+    } catch {
+      setAgentTools([]);
     }
   }
 
@@ -370,7 +392,7 @@ function App() {
         id: event.call.id,
         role: "tool",
         toolName: event.call.name,
-        content: `${event.call.name} を実行中...\narguments: ${JSON.stringify(event.call.arguments)}`
+        content: formatToolCall(event.call.name, event.call.arguments)
       });
       return currentContent;
     }
@@ -381,8 +403,8 @@ function App() {
         role: "tool",
         toolName: event.result.name,
         content: event.result.ok
-          ? formatToolResult(event.result.content)
-          : `ツール実行に失敗しました: ${event.result.error ?? "Unknown error"}`
+          ? formatToolResult(event.result.name, event.result.content)
+          : `${getToolLabel(event.result.name)} の実行に失敗しました。\n理由: ${event.result.error ?? "Unknown error"}`
       });
       return currentContent;
     }
@@ -517,14 +539,14 @@ function App() {
                     {message.role === "user" ? (
                       <User size={17} />
                     ) : message.role === "tool" ? (
-                      <CloudSun size={17} />
+                      <Wrench size={17} />
                     ) : (
                       <PixelMascot variant="avatar" />
                     )}
                   </div>
                   <div className="message-body">
                     {message.role !== "user" ? (
-                      <div className="message-meta">{message.role === "tool" ? `Tool: ${message.toolName}` : "Gemma4"}</div>
+                      <div className="message-meta">{message.role === "tool" ? `Tool: ${getToolLabel(message.toolName)}` : "Gemma4"}</div>
                     ) : null}
                     <MarkdownMessage content={message.content || (message.role === "assistant" && isGenerating ? "生成中..." : "")} />
                   </div>
@@ -679,6 +701,21 @@ function App() {
           <AlertCircle size={18} />
           <p>Tool Calling はエージェントモードでのみ有効です。通常チャットではツールを使わずに回答します。</p>
         </div>
+
+        {agentTools.length > 0 ? (
+          <section className="tool-list-panel" aria-labelledby="agent-tools-heading">
+            <h3 id="agent-tools-heading">Agent tools</h3>
+            <div className="tool-list">
+              {agentTools.map((tool) => (
+                <div key={tool.name} className="tool-list-item">
+                  <strong>{tool.displayName}</strong>
+                  <span>{tool.name}</span>
+                  <p>{tool.description}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </aside>
     </main>
   );
@@ -738,7 +775,7 @@ function HelpPage() {
           <p>会話一覧から履歴を切り替えられます。</p>
           <p>会話履歴と設定はブラウザに自動保存されます。</p>
           <p>通常チャットではモデルとの会話だけを行います。</p>
-          <p>エージェントモードではTool Callingを使って追加情報を取得できます。</p>
+          <p>エージェントモードでは日時、単位変換、天気のツールを使えます。</p>
           <p>Ollama 接続状態は上部バーで確認できます。</p>
         </div>
       </section>
@@ -957,7 +994,77 @@ function splitRelaxedStrongText(value: string): MarkdownNode[] {
   return nodes.length > 0 ? nodes : [{ type: "text", value }];
 }
 
-function formatToolResult(content: string) {
+function getToolLabel(name?: string) {
+  const labels: Record<string, string> = {
+    get_current_datetime: "現在日時",
+    convert_units: "単位変換",
+    get_current_weather: "現在天気"
+  };
+
+  return name ? labels[name] ?? name : "Unknown tool";
+}
+
+function formatToolCall(name: string, args: Record<string, unknown>) {
+  const argumentText = Object.keys(args).length > 0 ? JSON.stringify(args, null, 2) : "{}";
+
+  return [`${getToolLabel(name)} を実行中です。`, "arguments:", argumentText].join("\n");
+}
+
+function formatToolResult(name: string, content: string) {
+  if (name === "get_current_datetime") {
+    return formatDatetimeToolResult(content);
+  }
+
+  if (name === "convert_units") {
+    return formatUnitConversionToolResult(content);
+  }
+
+  if (name === "get_current_weather") {
+    return formatWeatherToolResult(content);
+  }
+
+  return content;
+}
+
+function formatDatetimeToolResult(content: string) {
+  try {
+    const datetime = JSON.parse(content) as {
+      iso?: string;
+      timeZone?: string;
+      localized?: string;
+    };
+
+    return [
+      "現在日時を取得しました。",
+      `日時: ${datetime.localized ?? datetime.iso ?? "unknown"}`,
+      `Timezone: ${datetime.timeZone ?? "unknown"}`
+    ].join("\n");
+  } catch {
+    return content;
+  }
+}
+
+function formatUnitConversionToolResult(content: string) {
+  try {
+    const conversion = JSON.parse(content) as {
+      value?: number;
+      fromUnit?: string;
+      toUnit?: string;
+      convertedValue?: number;
+      roundedValue?: number;
+    };
+
+    return [
+      "単位変換を実行しました。",
+      `入力: ${conversion.value ?? "unknown"} ${conversion.fromUnit ?? ""}`.trim(),
+      `結果: ${conversion.roundedValue ?? conversion.convertedValue ?? "unknown"} ${conversion.toUnit ?? ""}`.trim()
+    ].join("\n");
+  } catch {
+    return content;
+  }
+}
+
+function formatWeatherToolResult(content: string) {
   try {
     const weather = JSON.parse(content) as {
       location?: string;

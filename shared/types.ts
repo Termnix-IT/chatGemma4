@@ -42,6 +42,16 @@ export interface ToolDefinition {
   };
 }
 
+export interface AgentToolSummary {
+  name: string;
+  displayName: string;
+  description: string;
+}
+
+export interface AgentToolsResponse {
+  tools: AgentToolSummary[];
+}
+
 export interface ToolCall {
   id: string;
   name: string;

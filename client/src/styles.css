@@ -754,6 +754,7 @@ h2 {
   border-left: 1px solid #dfddd5;
   background: #fbfaf6;
   box-shadow: -18px 0 40px rgba(32, 38, 31, 0.12);
+  overflow: auto;
   transform: translateX(100%);
   transition: transform 180ms ease;
 }
@@ -791,7 +792,6 @@ h2 {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);
   gap: 10px;
-  margin-top: auto;
   padding: 12px;
   border-radius: 8px;
   color: #515a50;
@@ -801,6 +801,50 @@ h2 {
 .tooling-note p {
   margin: 0;
   line-height: 1.55;
+}
+
+.tool-list-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.tool-list-panel h3 {
+  margin: 0;
+  color: #20261f;
+  font-size: 0.92rem;
+  letter-spacing: 0;
+}
+
+.tool-list {
+  display: grid;
+  gap: 8px;
+}
+
+.tool-list-item {
+  display: grid;
+  gap: 3px;
+  padding: 11px;
+  border: 1px solid #dfddd5;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.tool-list-item strong {
+  color: #17201b;
+  font-size: 0.9rem;
+}
+
+.tool-list-item span {
+  color: #667064;
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.76rem;
+}
+
+.tool-list-item p {
+  margin: 4px 0 0;
+  color: #3f4940;
+  font-size: 0.84rem;
+  line-height: 1.5;
 }
 
 .mobile-only {

@@ -9,12 +9,13 @@ import type {
   ChatOptions,
   ChatRequest,
   ChatStreamEvent,
+  AgentToolsResponse,
   HealthResponse,
   ToolCall,
   ToolDefinition,
   ToolResult
 } from "../../shared/types.js";
-import { agentToolDefinitions, executeRegisteredTool } from "./tools/registry.js";
+import { agentToolDefinitions, agentToolSummaries, executeRegisteredTool } from "./tools/registry.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 3001);
@@ -45,6 +46,14 @@ app.use(express.json({ limit: "2mb" }));
 app.get("/api/health", async (_req, res) => {
   const health = await getHealth();
   res.status(health.ok ? 200 : 503).json(health);
+});
+
+app.get("/api/tools", (_req, res) => {
+  const response: AgentToolsResponse = {
+    tools: agentToolSummaries
+  };
+
+  res.json(response);
 });
 
 app.post("/api/chat", async (req, res) => {
