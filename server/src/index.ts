@@ -11,9 +11,10 @@ import type {
   ChatStreamEvent,
   HealthResponse,
   ToolCall,
+  ToolDefinition,
   ToolResult
 } from "../../shared/types.js";
-import { executeWeatherTool, weatherToolDefinition } from "./tools/weather.js";
+import { agentToolDefinitions, executeRegisteredTool } from "./tools/registry.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 3001);
@@ -276,7 +277,7 @@ async function streamOllamaPass(
     model: string;
     messages: OllamaMessage[];
     stream: boolean;
-    tools?: [typeof weatherToolDefinition];
+    tools?: ToolDefinition[];
     options: ChatOptions;
   } = {
     model,
@@ -286,7 +287,7 @@ async function streamOllamaPass(
   };
 
   if (mode === "agent") {
-    requestBody.tools = [weatherToolDefinition];
+    requestBody.tools = agentToolDefinitions;
   }
 
   const ollamaResponse = await fetch(`${ollamaBaseUrl}/api/chat`, {
@@ -397,17 +398,7 @@ function safeParseOllamaLine(line: string) {
 }
 
 async function executeToolCall(call: ToolCall): Promise<ToolResult> {
-  if (call.name === weatherToolDefinition.function.name) {
-    return executeWeatherTool(call.id, call.arguments);
-  }
-
-  return {
-    callId: call.id,
-    name: call.name,
-    ok: false,
-    content: "",
-    error: `Unknown tool: ${call.name}`
-  };
+  return executeRegisteredTool(call);
 }
 
 function writeStreamEvent(res: express.Response, event: ChatStreamEvent) {
