@@ -2,7 +2,7 @@
 
 Ollama 上の `gemma4:latest` とブラウザで会話するためのローカルチャットアプリです。ChatGPT 風の会話 UI、会話履歴のブラウザ保存、Markdown 表示、Tool Calling の検証用天気取得機能、ピクセルマスコット演出を備えています。
 
-![chatGemma screenshot](./README用スクリーンショット.png)
+![chatGemma screenshot](./public/readme-screenshot.png)
 
 ## Features
 
