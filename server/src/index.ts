@@ -255,9 +255,21 @@ async function runToolLoop(
     }
 
     for (const call of result.toolCalls) {
-      writeStreamEvent(res, { type: "tool_call", call });
+      const startedAt = new Date().toISOString();
+      const startedMs = Date.now();
+      const callWithMetadata: ToolCall = {
+        ...call,
+        startedAt
+      };
 
-      const toolResult = await executeToolCall(call);
+      writeStreamEvent(res, { type: "tool_call", call: callWithMetadata });
+
+      const toolResult = {
+        ...(await executeToolCall(callWithMetadata)),
+        startedAt,
+        completedAt: new Date().toISOString(),
+        durationMs: Date.now() - startedMs
+      };
       writeStreamEvent(res, { type: "tool_result", result: toolResult });
 
       messages.push({

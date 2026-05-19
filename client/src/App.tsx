@@ -5,20 +5,24 @@ import {
   AlertCircle,
   Bot,
   BookOpen,
+  Check,
   CloudSun,
   HelpCircle,
   Keyboard,
   Menu,
   MessageSquarePlus,
+  Pencil,
   PanelLeftClose,
   RotateCcw,
+  Search,
   Send,
   Settings,
   SlidersHorizontal,
   Square,
   Trash2,
   User,
-  Wrench
+  Wrench,
+  X
 } from "lucide-react";
 import type {
   AgentToolSummary,
@@ -34,6 +38,7 @@ import type {
 type Conversation = {
   id: string;
   title: string;
+  titleEdited: boolean;
   mode: ChatMode;
   messages: ChatMessage[];
   createdAt: string;
@@ -72,6 +77,9 @@ function App() {
   const [activeConversationId, setActiveConversationId] = useState<string>(() => loadActiveId());
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [input, setInput] = useState("");
+  const [conversationSearch, setConversationSearch] = useState("");
+  const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [status, setStatus] = useState<Status>({ tone: "idle", text: "Ollama 接続を確認中" });
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -91,6 +99,26 @@ function App() {
   const activeConversation = useMemo(() => {
     return conversations.find((conversation) => conversation.id === activeConversationId) ?? conversations[0];
   }, [activeConversationId, conversations]);
+
+  const filteredConversations = useMemo(() => {
+    const query = conversationSearch.trim().toLowerCase();
+
+    if (!query) {
+      return conversations;
+    }
+
+    return conversations.filter((conversation) => {
+      const searchableText = [
+        conversation.title,
+        conversation.mode,
+        ...conversation.messages.map((message) => message.content)
+      ]
+        .join("\n")
+        .toLowerCase();
+
+      return searchableText.includes(query);
+    });
+  }, [conversationSearch, conversations]);
 
   useEffect(() => {
     if (!activeConversation && conversations.length === 0) {
@@ -204,6 +232,42 @@ function App() {
           : conversation
       )
     );
+  }
+
+  function beginTitleEdit(conversation: Conversation) {
+    markActivity();
+    setEditingConversationId(conversation.id);
+    setEditingTitle(conversation.title);
+  }
+
+  function cancelTitleEdit() {
+    markActivity();
+    setEditingConversationId(null);
+    setEditingTitle("");
+  }
+
+  function saveTitleEdit() {
+    markActivity();
+
+    if (!editingConversationId) {
+      return;
+    }
+
+    const title = editingTitle.trim() || "New chat";
+    setConversations((current) =>
+      current.map((conversation) =>
+        conversation.id === editingConversationId
+          ? {
+              ...conversation,
+              title,
+              titleEdited: true,
+              updatedAt: new Date().toISOString()
+            }
+          : conversation
+      )
+    );
+    setEditingConversationId(null);
+    setEditingTitle("");
   }
 
   function deleteConversation(id: string) {
@@ -342,7 +406,7 @@ function App() {
         conversation.id === id
           ? {
               ...conversation,
-              title: getConversationTitle(messages),
+              title: conversation.titleEdited ? conversation.title : getConversationTitle(messages),
               messages,
               updatedAt: new Date().toISOString()
             }
@@ -364,7 +428,7 @@ function App() {
 
         return {
           ...conversation,
-          title: getConversationTitle(messages),
+          title: conversation.titleEdited ? conversation.title : getConversationTitle(messages),
           messages,
           updatedAt: new Date().toISOString()
         };
@@ -392,7 +456,7 @@ function App() {
         id: event.call.id,
         role: "tool",
         toolName: event.call.name,
-        content: formatToolCall(event.call.name, event.call.arguments)
+        content: formatToolCall(event.call.name, event.call.arguments, event.call.startedAt)
       });
       return currentContent;
     }
@@ -403,8 +467,8 @@ function App() {
         role: "tool",
         toolName: event.result.name,
         content: event.result.ok
-          ? formatToolResult(event.result.name, event.result.content)
-          : `${getToolLabel(event.result.name)} の実行に失敗しました。\n理由: ${event.result.error ?? "Unknown error"}`
+          ? formatToolResult(event.result.name, event.result.content, event.result)
+          : formatToolFailure(event.result.name, event.result.error, event.result)
       });
       return currentContent;
     }
@@ -464,26 +528,85 @@ function App() {
           New chat
         </button>
 
+        <label className="conversation-search">
+          <Search size={16} />
+          <input
+            value={conversationSearch}
+            onChange={(event) => {
+              markActivity();
+              setConversationSearch(event.target.value);
+            }}
+            placeholder="会話を検索"
+          />
+        </label>
+
         <nav className="conversation-list" aria-label="会話一覧">
-          {conversations.map((conversation) => (
-            <button
-      key={conversation.id}
-              className={`conversation-item ${
-                workspaceView === "chat" && conversation.id === activeConversation?.id ? "is-active" : ""
-              }`}
-              onClick={() => {
-                markActivity();
-                setActiveConversationId(conversation.id);
-                setWorkspaceView("chat");
-              }}
-            >
-              <span>{conversation.title}</span>
-              <small className="conversation-meta">
-                <span>{formatDate(conversation.updatedAt)}</span>
-                <span>{conversation.mode === "agent" ? "Agent" : "Chat"}</span>
-              </small>
-            </button>
-          ))}
+          {filteredConversations.length > 0 ? (
+            filteredConversations.map((conversation) => (
+              <div
+                key={conversation.id}
+                className={`conversation-item ${
+                  workspaceView === "chat" && conversation.id === activeConversation?.id ? "is-active" : ""
+                }`}
+              >
+                {editingConversationId === conversation.id ? (
+                  <div className="conversation-edit">
+                    <input
+                      value={editingTitle}
+                      onChange={(event) => setEditingTitle(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          saveTitleEdit();
+                        }
+
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          cancelTitleEdit();
+                        }
+                      }}
+                      autoFocus
+                      aria-label="会話タイトル"
+                    />
+                    <button type="button" onClick={saveTitleEdit} aria-label="タイトルを保存">
+                      <Check size={15} />
+                    </button>
+                    <button type="button" onClick={cancelTitleEdit} aria-label="タイトル編集をキャンセル">
+                      <X size={15} />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="conversation-select"
+                      onClick={() => {
+                        markActivity();
+                        setActiveConversationId(conversation.id);
+                        setWorkspaceView("chat");
+                      }}
+                    >
+                      <span>{conversation.title}</span>
+                      <small className="conversation-meta">
+                        <span>{formatDate(conversation.updatedAt)}</span>
+                        <span>{conversation.mode === "agent" ? "Agent" : "Chat"}</span>
+                      </small>
+                    </button>
+                    <button
+                      type="button"
+                      className="conversation-edit-button"
+                      onClick={() => beginTitleEdit(conversation)}
+                      aria-label="会話タイトルを編集"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                  </>
+                )}
+              </div>
+            ))
+          ) : (
+            <p className="conversation-empty">一致する会話がありません</p>
+          )}
         </nav>
 
         <div className="sidebar-footer">
@@ -773,9 +896,10 @@ function HelpPage() {
         </div>
         <div className="feature-list">
           <p>会話一覧から履歴を切り替えられます。</p>
+          <p>会話タイトルは編集でき、検索欄でタイトルと本文を絞り込めます。</p>
           <p>会話履歴と設定はブラウザに自動保存されます。</p>
           <p>通常チャットではモデルとの会話だけを行います。</p>
-          <p>エージェントモードでは日時、単位変換、天気のツールを使えます。</p>
+          <p>エージェントモードでは日時、単位変換、現在天気、天気予報のツールを使えます。</p>
           <p>Ollama 接続状態は上部バーで確認できます。</p>
         </div>
       </section>
@@ -816,7 +940,7 @@ function HelpPage() {
           <h3 id="help-weather">天気情報の取得</h3>
         </div>
         <p className="help-copy">
-          エージェントモードで「東京の天気を教えて」のように場所を含めて質問すると、観測時刻、気温、状態、風速、風向を取得して表示します。
+          エージェントモードで「東京の天気を教えて」や「明日の大阪の天気は？」のように場所を含めて質問すると、現在天気や日別予報を取得して表示します。
         </p>
       </section>
     </div>
@@ -849,6 +973,7 @@ function loadConversations(): Conversation[] {
 function normalizeConversation(conversation: Conversation): Conversation {
   return {
     ...conversation,
+    titleEdited: Boolean(conversation.titleEdited),
     mode: conversation.mode === "agent" ? "agent" : "chat",
     messages: Array.isArray(conversation.messages) ? conversation.messages : []
   };
@@ -878,6 +1003,7 @@ function createConversation(): Conversation {
   return {
     id: crypto.randomUUID(),
     title: "New chat",
+    titleEdited: false,
     mode: "chat",
     messages: [],
     createdAt: now,
@@ -998,32 +1124,74 @@ function getToolLabel(name?: string) {
   const labels: Record<string, string> = {
     get_current_datetime: "現在日時",
     convert_units: "単位変換",
-    get_current_weather: "現在天気"
+    get_current_weather: "現在天気",
+    get_weather_forecast: "天気予報"
   };
 
   return name ? labels[name] ?? name : "Unknown tool";
 }
 
-function formatToolCall(name: string, args: Record<string, unknown>) {
+function formatToolCall(name: string, args: Record<string, unknown>, startedAt?: string) {
   const argumentText = Object.keys(args).length > 0 ? JSON.stringify(args, null, 2) : "{}";
 
-  return [`${getToolLabel(name)} を実行中です。`, "arguments:", argumentText].join("\n");
+  return [
+    `${getToolLabel(name)} を実行中です。`,
+    `開始: ${formatToolTimestamp(startedAt)}`,
+    "arguments:",
+    argumentText
+  ].join("\n");
 }
 
-function formatToolResult(name: string, content: string) {
+function formatToolResult(name: string, content: string, result: { completedAt?: string; durationMs?: number }) {
+  const metadata = formatToolMetadata(result);
+  let formattedContent = content;
+
   if (name === "get_current_datetime") {
-    return formatDatetimeToolResult(content);
+    formattedContent = formatDatetimeToolResult(content);
+  } else if (name === "convert_units") {
+    formattedContent = formatUnitConversionToolResult(content);
+  } else if (name === "get_current_weather") {
+    formattedContent = formatWeatherToolResult(content);
+  } else if (name === "get_weather_forecast") {
+    formattedContent = formatWeatherForecastToolResult(content);
   }
 
-  if (name === "convert_units") {
-    return formatUnitConversionToolResult(content);
+  return [formattedContent, metadata].filter(Boolean).join("\n");
+}
+
+function formatToolFailure(
+  name: string,
+  error: string | undefined,
+  result: { completedAt?: string; durationMs?: number }
+) {
+  return [
+    `${getToolLabel(name)} の実行に失敗しました。`,
+    `理由: ${error ?? "Unknown error"}`,
+    formatToolMetadata(result)
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function formatToolMetadata(result: { completedAt?: string; durationMs?: number }) {
+  return [
+    `完了: ${formatToolTimestamp(result.completedAt)}`,
+    typeof result.durationMs === "number" ? `所要時間: ${result.durationMs} ms` : ""
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function formatToolTimestamp(value?: string) {
+  if (!value) {
+    return "unknown";
   }
 
-  if (name === "get_current_weather") {
-    return formatWeatherToolResult(content);
-  }
-
-  return content;
+  return new Intl.DateTimeFormat("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).format(new Date(value));
 }
 
 function formatDatetimeToolResult(content: string) {
@@ -1083,6 +1251,39 @@ function formatWeatherToolResult(content: string) {
       `風速: ${weather.windSpeedKmh ?? "unknown"} km/h`,
       `風向: ${weather.windDirectionDegrees ?? "unknown"}°`
     ].join("\n");
+  } catch {
+    return content;
+  }
+}
+
+function formatWeatherForecastToolResult(content: string) {
+  try {
+    const forecast = JSON.parse(content) as {
+      location?: string;
+      days?: Array<{
+        date?: string;
+        maxTemperatureCelsius?: number;
+        minTemperatureCelsius?: number;
+        precipitationProbabilityPercent?: number;
+        condition?: string;
+      }>;
+    };
+
+    const lines = [`${forecast.location ?? "Location"} の天気予報を取得しました。`];
+
+    for (const day of forecast.days ?? []) {
+      lines.push(
+        [
+          day.date ?? "unknown",
+          `最高 ${day.maxTemperatureCelsius ?? "unknown"} ℃`,
+          `最低 ${day.minTemperatureCelsius ?? "unknown"} ℃`,
+          `降水確率 ${day.precipitationProbabilityPercent ?? "unknown"}%`,
+          day.condition ?? "unknown"
+        ].join(" / ")
+      );
+    }
+
+    return lines.join("\n");
   } catch {
     return content;
   }

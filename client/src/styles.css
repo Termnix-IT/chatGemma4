@@ -116,6 +116,8 @@ h2 {
 .icon-button,
 .send-button,
 .conversation-item,
+.conversation-select,
+.conversation-edit-button,
 .help-button {
   border: 0;
   border-radius: 8px;
@@ -152,12 +154,11 @@ h2 {
 
 .conversation-item {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
   gap: 6px;
   width: 100%;
-  padding: 12px;
   color: #cfd5cb;
   background: transparent;
-  text-align: left;
 }
 
 .conversation-item:hover,
@@ -166,14 +167,100 @@ h2 {
   color: #ffffff;
 }
 
-.conversation-item span {
+.conversation-select {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+}
+
+.conversation-select span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.conversation-item small {
+.conversation-select small {
   color: #929b8c;
+}
+
+.conversation-edit-button {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  align-self: center;
+  place-items: center;
+  color: #aeb6aa;
+  background: transparent;
+}
+
+.conversation-edit-button:hover {
+  color: #ffffff;
+  background: rgba(248, 247, 241, 0.1);
+}
+
+.conversation-edit {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px 30px;
+  gap: 6px;
+  padding: 8px;
+}
+
+.conversation-edit input,
+.conversation-search input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+}
+
+.conversation-edit input {
+  border-radius: 7px;
+  padding: 0 9px;
+  color: #17201b;
+  background: #ffffff;
+}
+
+.conversation-edit button {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  color: #f8f7f1;
+  background: #3b4538;
+}
+
+.conversation-search {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 11px;
+  border-radius: 8px;
+  color: #aeb6aa;
+  background: #30382e;
+}
+
+.conversation-search input {
+  color: #ffffff;
+  background: transparent;
+}
+
+.conversation-search input::placeholder {
+  color: #929b8c;
+}
+
+.conversation-empty {
+  margin: 0;
+  padding: 12px;
+  color: #929b8c;
+  font-size: 0.86rem;
 }
 
 .conversation-meta {

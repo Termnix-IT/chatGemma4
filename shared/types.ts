@@ -56,6 +56,7 @@ export interface ToolCall {
   id: string;
   name: string;
   arguments: Record<string, unknown>;
+  startedAt?: string;
 }
 
 export interface ToolResult {
@@ -63,6 +64,9 @@ export interface ToolResult {
   name: string;
   ok: boolean;
   content: string;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
   error?: string;
 }
 
