@@ -6,11 +6,16 @@ import {
   Bot,
   BookOpen,
   Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CloudSun,
+  Copy,
   HelpCircle,
   Keyboard,
   Menu,
   MessageSquarePlus,
+  Moon,
   Pencil,
   PanelLeftClose,
   RotateCcw,
@@ -19,6 +24,7 @@ import {
   Settings,
   SlidersHorizontal,
   Square,
+  Sun,
   Trash2,
   User,
   Wrench,
@@ -61,6 +67,9 @@ type WorkspaceView = "chat" | "help";
 const CONVERSATIONS_KEY = "chatgemma.conversations.v1";
 const ACTIVE_CONVERSATION_KEY = "chatgemma.activeConversation.v1";
 const SETTINGS_KEY = "chatgemma.settings.v1";
+const THEME_KEY = "chatgemma.theme.v1";
+
+type Theme = "light" | "dark";
 const MASCOT_IDLE_DELAY_MS = 20_000;
 const MASCOT_AVATAR_SHEET_SRC = "/mascot/bunny-bot-sheet.png";
 const MASCOT_CHAT_JUMP_SHEET_SRC = "/mascot/bunny-bot-chat-jump-sheet.png";
@@ -88,6 +97,7 @@ function App() {
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("chat");
   const [lastActivityAt, setLastActivityAt] = useState(() => Date.now());
   const [isMascotIdle, setIsMascotIdle] = useState(false);
+  const [theme, setTheme] = useState<Theme>(() => loadTheme());
   const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -103,22 +113,29 @@ function App() {
   const filteredConversations = useMemo(() => {
     const query = conversationSearch.trim().toLowerCase();
 
-    if (!query) {
-      return conversations;
-    }
+    const matched = !query
+      ? conversations
+      : conversations.filter((conversation) => {
+          const searchableText = [
+            conversation.title,
+            conversation.mode,
+            ...conversation.messages.map((message) => message.content)
+          ]
+            .join("\n")
+            .toLowerCase();
 
-    return conversations.filter((conversation) => {
-      const searchableText = [
-        conversation.title,
-        conversation.mode,
-        ...conversation.messages.map((message) => message.content)
-      ]
-        .join("\n")
-        .toLowerCase();
+          return searchableText.includes(query);
+        });
 
-      return searchableText.includes(query);
-    });
+    return [...matched].sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    );
   }, [conversationSearch, conversations]);
+
+  const conversationGroups = useMemo(
+    () => groupConversationsByDate(filteredConversations),
+    [filteredConversations]
+  );
 
   useEffect(() => {
     if (!activeConversation && conversations.length === 0) {
@@ -141,6 +158,11 @@ function App() {
   useEffect(() => {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   }, [settings]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
 
   useEffect(() => {
     void refreshHealth();
@@ -510,11 +532,34 @@ function App() {
 
   const canRetry = activeConversation?.messages.some((message) => message.role === "user") ?? false;
 
+  const lastAssistantId = useMemo(() => {
+    if (!activeConversation) {
+      return null;
+    }
+
+    for (let i = activeConversation.messages.length - 1; i >= 0; i -= 1) {
+      if (activeConversation.messages[i].role === "assistant") {
+        return activeConversation.messages[i].id ?? null;
+      }
+    }
+
+    return null;
+  }, [activeConversation]);
+
   return (
     <main className={`app-shell ${sidebarOpen ? "is-sidebar-open" : "is-sidebar-collapsed"}`}>
       <aside className={`sidebar ${sidebarOpen ? "is-open" : ""}`}>
         <div className="sidebar-header">
-          <div>
+          <button
+            className="sidebar-toggle desktop-only"
+            onClick={() => setSidebarOpen((open) => !open)}
+            aria-label={sidebarOpen ? "サイドバーを折りたたむ" : "サイドバーを展開"}
+            aria-expanded={sidebarOpen}
+            title={sidebarOpen ? "折りたたむ" : "展開"}
+          >
+            {sidebarOpen ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
+          </button>
+          <div className="sidebar-header-text">
             <p className="eyebrow">Local LLM</p>
             <h1>chatGemma</h1>
           </div>
@@ -523,9 +568,9 @@ function App() {
           </button>
         </div>
 
-        <button className="new-chat-button" onClick={startNewConversation}>
+        <button className="new-chat-button" onClick={startNewConversation} title="新しいチャット">
           <MessageSquarePlus size={18} />
-          New chat
+          <span>New chat</span>
         </button>
 
         <label className="conversation-search">
@@ -542,14 +587,17 @@ function App() {
 
         <nav className="conversation-list" aria-label="会話一覧">
           {filteredConversations.length > 0 ? (
-            filteredConversations.map((conversation) => (
-              <div
-                key={conversation.id}
-                className={`conversation-item ${
-                  workspaceView === "chat" && conversation.id === activeConversation?.id ? "is-active" : ""
-                }`}
-              >
-                {editingConversationId === conversation.id ? (
+            conversationGroups.map((group) => (
+              <section className="conversation-group" key={group.label}>
+                <h3 className="conversation-group-heading">{group.label}</h3>
+                {group.items.map((conversation) => (
+                  <div
+                    key={conversation.id}
+                    className={`conversation-item ${
+                      workspaceView === "chat" && conversation.id === activeConversation?.id ? "is-active" : ""
+                    }`}
+                  >
+                    {editingConversationId === conversation.id ? (
                   <div className="conversation-edit">
                     <input
                       value={editingTitle}
@@ -597,12 +645,24 @@ function App() {
                       className="conversation-edit-button"
                       onClick={() => beginTitleEdit(conversation)}
                       aria-label="会話タイトルを編集"
+                      title="タイトルを編集"
                     >
                       <Pencil size={14} />
                     </button>
+                    <button
+                      type="button"
+                      className="conversation-delete-button"
+                      onClick={() => deleteConversation(conversation.id)}
+                      aria-label="会話を削除"
+                      title="会話を削除"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </>
                 )}
-              </div>
+                  </div>
+                ))}
+              </section>
             ))
           ) : (
             <p className="conversation-empty">一致する会話がありません</p>
@@ -626,7 +686,7 @@ function App() {
       <section className="chat-workspace">
         <header className="topbar">
           <button
-            className="icon-button"
+            className="icon-button mobile-only"
             onClick={() => setSidebarOpen((open) => !open)}
             aria-label={sidebarOpen ? "会話一覧を閉じる" : "会話一覧を開く"}
             aria-pressed={sidebarOpen}
@@ -643,6 +703,14 @@ function App() {
             <button className="icon-button" onClick={() => void refreshHealth()} aria-label="接続を再確認">
               <RotateCcw size={18} />
             </button>
+            <button
+              className="icon-button"
+              onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+              aria-label={theme === "dark" ? "ライトモードに切り替え" : "ダークモードに切り替え"}
+              title={theme === "dark" ? "ライトモードに切り替え" : "ダークモードに切り替え"}
+            >
+              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
             <button className="icon-button" onClick={() => setSettingsOpen((open) => !open)} aria-label="設定">
               <Settings size={18} />
             </button>
@@ -656,25 +724,58 @@ function App() {
             <div className="conversation-surface">
               {activeConversation && activeConversation.messages.length > 0 ? (
                 <div className="message-list">
-                  {activeConversation.messages.map((message) => (
-                    <article key={message.id} className={`message-row ${message.role}`}>
-                      <div className="avatar" aria-hidden="true">
-                    {message.role === "user" ? (
-                      <User size={17} />
-                    ) : message.role === "tool" ? (
-                      <Wrench size={17} />
-                    ) : (
-                      <PixelMascot variant="avatar" />
-                    )}
-                  </div>
-                  <div className="message-body">
-                    {message.role !== "user" ? (
-                      <div className="message-meta">{message.role === "tool" ? `Tool: ${getToolLabel(message.toolName)}` : "Gemma4"}</div>
-                    ) : null}
-                    <MarkdownMessage content={message.content || (message.role === "assistant" && isGenerating ? "生成中..." : "")} />
-                  </div>
-                </article>
-                  ))}
+                  {activeConversation.messages.map((message) => {
+                    const isAssistant = message.role === "assistant";
+                    const isTool = message.role === "tool";
+                    const isUser = message.role === "user";
+                    const displayContent =
+                      message.content || (isAssistant && isGenerating ? "生成中..." : "");
+
+                    return (
+                      <article key={message.id} className={`message-row ${message.role}`}>
+                        <div className="avatar" aria-hidden="true">
+                          {isUser ? (
+                            <User size={15} />
+                          ) : isTool ? (
+                            <Wrench size={15} />
+                          ) : (
+                            <PixelMascot variant="avatar" />
+                          )}
+                        </div>
+                        <div className="message-body">
+                          {isTool ? (
+                            <ToolBlock
+                              toolName={message.toolName}
+                              content={displayContent}
+                            />
+                          ) : (
+                            <>
+                              {isAssistant ? (
+                                <div className="message-meta">Gemma4</div>
+                              ) : null}
+                              <MarkdownMessage content={displayContent} />
+                              {isAssistant && message.content ? (
+                                <div className="message-actions">
+                                  <CopyButton text={message.content} />
+                                  {message.id === lastAssistantId && canRetry && !isGenerating ? (
+                                    <button
+                                      type="button"
+                                      className="message-action-button"
+                                      onClick={retryLastMessage}
+                                      aria-label="再生成"
+                                      title="再生成"
+                                    >
+                                      <RotateCcw size={14} />
+                                    </button>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
                   <div ref={messagesEndRef} />
                 </div>
               ) : (
@@ -682,6 +783,32 @@ function App() {
                   <PixelMascot variant="empty" />
                   <h2>Gemma4 と会話を始める</h2>
                   <p>ローカルの Ollama モデルに接続して、日本語でそのまま質問できます。</p>
+                  <div className="suggestion-pills" role="list">
+                    {getSuggestionPrompts(activeConversation?.mode ?? "chat").map((prompt) => (
+                      <button
+                        key={prompt}
+                        type="button"
+                        role="listitem"
+                        className="suggestion-pill"
+                        onClick={() => {
+                          markActivity();
+                          setInput(prompt);
+                        }}
+                      >
+                        {prompt}
+                      </button>
+                    ))}
+                  </div>
+                  {activeConversation?.mode === "agent" && agentTools.length > 0 ? (
+                    <div className="tool-chips" aria-label="利用可能なツール">
+                      {agentTools.map((tool) => (
+                        <span key={tool.name} className="tool-chip">
+                          <Wrench size={12} />
+                          {tool.displayName}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -692,54 +819,7 @@ function App() {
                   <PixelMascot variant="idle" />
                 </div>
               ) : null}
-              <div className="composer-actions">
-                {activeConversation ? (
-                  <div className="mode-toggle" aria-label="チャットモード">
-                    <button
-                      type="button"
-                      className={activeConversation.mode !== "agent" ? "is-active" : ""}
-                      onClick={() => updateConversationMode(activeConversation.id, "chat")}
-                      disabled={isGenerating}
-                      aria-pressed={activeConversation.mode !== "agent"}
-                    >
-                      <MessageSquarePlus size={15} />
-                      チャット
-                    </button>
-                    <button
-                      type="button"
-                      className={activeConversation.mode === "agent" ? "is-active" : ""}
-                      onClick={() => updateConversationMode(activeConversation.id, "agent")}
-                      disabled={isGenerating}
-                      aria-pressed={activeConversation.mode === "agent"}
-                    >
-                      <Bot size={15} />
-                      エージェント
-                    </button>
-                  </div>
-                ) : null}
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={retryLastMessage}
-                  disabled={!canRetry || isGenerating}
-                >
-                  <RotateCcw size={16} />
-                  再送信
-                </button>
-                {activeConversation && activeConversation.messages.length > 0 ? (
-                  <button
-                    type="button"
-                    className="text-button danger"
-                    onClick={() => deleteConversation(activeConversation.id)}
-                    disabled={isGenerating}
-                  >
-                    <Trash2 size={16} />
-                    削除
-                  </button>
-                ) : null}
-              </div>
-
-              <div className="input-row">
+              <div className="composer-card">
                 <textarea
                   value={input}
                   onChange={(event) => {
@@ -756,15 +836,44 @@ function App() {
                   rows={1}
                   disabled={isGenerating}
                 />
-                {isGenerating ? (
-                  <button type="button" className="send-button" onClick={stopGenerating} aria-label="生成を停止">
-                    <Square size={18} />
-                  </button>
-                ) : (
-                  <button type="submit" className="send-button" disabled={!input.trim()} aria-label="送信">
-                    <Send size={18} />
-                  </button>
-                )}
+                <div className="composer-bottom">
+                  {activeConversation ? (
+                    <div className="mode-toggle" aria-label="チャットモード">
+                      <button
+                        type="button"
+                        className={activeConversation.mode !== "agent" ? "is-active" : ""}
+                        onClick={() => updateConversationMode(activeConversation.id, "chat")}
+                        disabled={isGenerating}
+                        aria-pressed={activeConversation.mode !== "agent"}
+                      >
+                        <MessageSquarePlus size={14} />
+                        チャット
+                      </button>
+                      <button
+                        type="button"
+                        className={activeConversation.mode === "agent" ? "is-active" : ""}
+                        onClick={() => updateConversationMode(activeConversation.id, "agent")}
+                        disabled={isGenerating}
+                        aria-pressed={activeConversation.mode === "agent"}
+                      >
+                        <Bot size={14} />
+                        エージェント
+                      </button>
+                    </div>
+                  ) : null}
+                  <span className="composer-hint" aria-hidden="true">
+                    Enter で送信 / Shift + Enter で改行
+                  </span>
+                  {isGenerating ? (
+                    <button type="button" className="send-button" onClick={stopGenerating} aria-label="生成を停止">
+                      <Square size={16} />
+                    </button>
+                  ) : (
+                    <button type="submit" className="send-button" disabled={!input.trim()} aria-label="送信">
+                      <Send size={16} />
+                    </button>
+                  )}
+                </div>
               </div>
             </form>
           </>
@@ -947,6 +1056,51 @@ function HelpPage() {
   );
 }
 
+function ToolBlock({ toolName, content }: { toolName?: string; content: string }) {
+  const label = `Tool: ${getToolLabel(toolName)}`;
+  const lines = content.split("\n").map((line) => line.trim()).filter(Boolean);
+  const summary = lines[0] ?? "実行中…";
+
+  return (
+    <details className="tool-details">
+      <summary>
+        <span className="tool-summary-text">
+          <span className="message-meta">{label}</span>
+          <span className="tool-summary-line">{summary}</span>
+        </span>
+        <ChevronDown size={16} className="tool-chevron" aria-hidden="true" />
+      </summary>
+      <div className="tool-details-body">
+        <MarkdownMessage content={content} />
+      </div>
+    </details>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <button
+      type="button"
+      className={`message-action-button ${copied ? "is-confirmed" : ""}`}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1500);
+        } catch {
+          // クリップボード API が拒否された場合は無視
+        }
+      }}
+      aria-label={copied ? "コピーしました" : "コピー"}
+      title={copied ? "コピーしました" : "コピー"}
+    >
+      {copied ? <Check size={14} /> : <Copy size={14} />}
+    </button>
+  );
+}
+
 function MarkdownMessage({ content }: { content: string }) {
   return (
     <div className="markdown-message">
@@ -981,6 +1135,20 @@ function normalizeConversation(conversation: Conversation): Conversation {
 
 function loadActiveId() {
   return localStorage.getItem(ACTIVE_CONVERSATION_KEY) ?? "";
+}
+
+function loadTheme(): Theme {
+  const stored = localStorage.getItem(THEME_KEY);
+
+  if (stored === "light" || stored === "dark") {
+    return stored;
+  }
+
+  if (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+    return "dark";
+  }
+
+  return "light";
 }
 
 function loadSettings(): AppSettings {
@@ -1044,6 +1212,39 @@ function getConversationTitle(messages: ChatMessage[]) {
   }
 
   return firstUserMessage.length > 34 ? `${firstUserMessage.slice(0, 34)}...` : firstUserMessage;
+}
+
+function groupConversationsByDate(conversations: Conversation[]): Array<{ label: string; items: Conversation[] }> {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfYesterday = startOfToday - 86_400_000;
+  const sevenDaysAgo = startOfToday - 6 * 86_400_000;
+
+  const today: Conversation[] = [];
+  const yesterday: Conversation[] = [];
+  const week: Conversation[] = [];
+  const older: Conversation[] = [];
+
+  for (const conversation of conversations) {
+    const updated = new Date(conversation.updatedAt).getTime();
+
+    if (updated >= startOfToday) {
+      today.push(conversation);
+    } else if (updated >= startOfYesterday) {
+      yesterday.push(conversation);
+    } else if (updated >= sevenDaysAgo) {
+      week.push(conversation);
+    } else {
+      older.push(conversation);
+    }
+  }
+
+  return [
+    { label: "今日", items: today },
+    { label: "昨日", items: yesterday },
+    { label: "過去 7 日", items: week },
+    { label: "それ以前", items: older }
+  ].filter((group) => group.items.length > 0);
 }
 
 function formatDate(value: string) {
@@ -1118,6 +1319,24 @@ function splitRelaxedStrongText(value: string): MarkdownNode[] {
   }
 
   return nodes.length > 0 ? nodes : [{ type: "text", value }];
+}
+
+function getSuggestionPrompts(mode: ChatMode): string[] {
+  if (mode === "agent") {
+    return [
+      "今の日時を教えて",
+      "東京の天気を教えて",
+      "明日の大阪の天気予報は？",
+      "100kmはマイルでいくつ？"
+    ];
+  }
+
+  return [
+    "TypeScript と JavaScript の違いを簡単に教えて",
+    "Python でフィボナッチ数列のコードを書いて",
+    "短い俳句をひとつ作って",
+    "美味しいパスタの作り方を教えて"
+  ];
 }
 
 function getToolLabel(name?: string) {
