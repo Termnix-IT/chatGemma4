@@ -55,6 +55,30 @@ API の状態確認:
 http://127.0.0.1:3001/api/health
 ```
 
+## Docker
+
+本番相当の起動だけを Docker で行う場合は、ホスト側で Ollama を起動したうえで、アプリコンテナだけを起動します。
+
+```powershell
+docker compose up --build
+```
+
+起動後、ブラウザで以下を開きます。
+
+```text
+http://127.0.0.1:3001
+```
+
+Docker コンテナからホスト側 Ollama へ接続するため、`compose.yaml` では以下を指定しています。
+
+```yaml
+OLLAMA_BASE_URL: "http://host.docker.internal:11434"
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+Linux では `extra_hosts` の `host-gateway` により `host.docker.internal` をホストへ解決します。Ollama が `127.0.0.1:11434` のみに bind している環境では、コンテナから接続できない場合があります。その場合はホスト側 Ollama を `OLLAMA_HOST=0.0.0.0:11434` で起動してください。
+
 ## Development
 
 開発時はフロントエンドと API サーバーを同時に起動できます。
