@@ -18,6 +18,7 @@ import {
   Moon,
   Pencil,
   PanelLeftClose,
+  Pin,
   RotateCcw,
   Search,
   Send,
@@ -47,6 +48,7 @@ type Conversation = {
   titleEdited: boolean;
   mode: ChatMode;
   messages: ChatMessage[];
+  pinned: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -290,6 +292,15 @@ function App() {
     );
     setEditingConversationId(null);
     setEditingTitle("");
+  }
+
+  function toggleConversationPinned(id: string) {
+    markActivity();
+    setConversations((current) =>
+      current.map((conversation) =>
+        conversation.id === id ? { ...conversation, pinned: !conversation.pinned } : conversation
+      )
+    );
   }
 
   function deleteConversation(id: string) {
@@ -595,7 +606,7 @@ function App() {
                     key={conversation.id}
                     className={`conversation-item ${
                       workspaceView === "chat" && conversation.id === activeConversation?.id ? "is-active" : ""
-                    }`}
+                    } ${conversation.pinned ? "is-pinned" : ""}`}
                   >
                     {editingConversationId === conversation.id ? (
                   <div className="conversation-edit">
@@ -639,6 +650,15 @@ function App() {
                         <span>{formatDate(conversation.updatedAt)}</span>
                         <span>{conversation.mode === "agent" ? "Agent" : "Chat"}</span>
                       </small>
+                    </button>
+                    <button
+                      type="button"
+                      className={`conversation-pin-button ${conversation.pinned ? "is-active" : ""}`}
+                      onClick={() => toggleConversationPinned(conversation.id)}
+                      aria-label={conversation.pinned ? "会話のピン留めを解除" : "会話をピン留め"}
+                      title={conversation.pinned ? "ピン留めを解除" : "ピン留め"}
+                    >
+                      <Pin size={14} />
                     </button>
                     <button
                       type="button"
@@ -893,6 +913,7 @@ function App() {
 
         <label className="field">
           <span>Model</span>
+          <small>Ollama に用意されているモデル名を指定します。変更後は上部の再確認ボタンで接続状態を確認できます。</small>
           <input
             value={settings.model}
             onChange={(event) => {
@@ -904,6 +925,7 @@ function App() {
 
         <label className="field">
           <span>Temperature: {settings.temperature.toFixed(1)}</span>
+          <small>低いほど安定した回答になり、高いほど表現や発想の幅が広がります。普段使いは 0.7 前後が目安です。</small>
           <input
             type="range"
             min="0"
@@ -919,6 +941,7 @@ function App() {
 
         <label className="field">
           <span>System prompt</span>
+          <small>回答の口調、役割、優先する方針を指定します。空にすると追加指示なしで会話します。</small>
           <textarea
             value={settings.systemPrompt}
             onChange={(event) => {
@@ -931,7 +954,10 @@ function App() {
 
         <div className="tooling-note">
           <AlertCircle size={18} />
-          <p>Tool Calling はエージェントモードでのみ有効です。通常チャットではツールを使わずに回答します。</p>
+          <div>
+            <p>Tool Calling はエージェントモードでのみ有効です。通常チャットではツールを使わずに回答します。</p>
+            <p>設定と会話履歴はこのブラウザの localStorage に保存されます。別のブラウザや端末には共有されません。</p>
+          </div>
         </div>
 
         {agentTools.length > 0 ? (
@@ -1024,6 +1050,30 @@ function HelpPage() {
           <p>System prompt では会話全体に適用する振る舞いや回答方針を指定できます。</p>
           <p>変更した設定はブラウザに保存され、次回以降も引き継がれます。</p>
         </div>
+      </section>
+
+      <section className="help-section" aria-labelledby="help-modes">
+        <div className="help-section-heading">
+          <Bot size={20} />
+          <h3 id="help-modes">チャットモードの違い</h3>
+        </div>
+        <div className="feature-list">
+          <p>通常チャットは会話履歴と System prompt だけをモデルへ送り、ツールは使いません。</p>
+          <p>エージェントモードは質問に応じて日時、単位変換、天気ツールを呼び出します。</p>
+          <p>ツールを使った回答では、実行ログを開いて引数、結果、所要時間を確認できます。</p>
+          <p>外部通信を伴う天気取得は Open-Meteo を使い、ファイル操作や shell 実行は行いません。</p>
+        </div>
+      </section>
+
+      <section className="help-section" aria-labelledby="help-storage">
+        <div className="help-section-heading">
+          <MessageSquarePlus size={20} />
+          <h3 id="help-storage">保存される内容</h3>
+        </div>
+        <p className="help-copy">
+          会話履歴、選択中の会話、Model controls、テーマ設定はブラウザの localStorage に保存されます。
+          サーバー側のデータベースやアカウント同期はありません。ブラウザのサイトデータを削除すると、保存済みの会話も消えます。
+        </p>
       </section>
 
       <section className="help-section" aria-labelledby="help-shortcuts">
@@ -1129,7 +1179,8 @@ function normalizeConversation(conversation: Conversation): Conversation {
     ...conversation,
     titleEdited: Boolean(conversation.titleEdited),
     mode: conversation.mode === "agent" ? "agent" : "chat",
-    messages: Array.isArray(conversation.messages) ? conversation.messages : []
+    messages: Array.isArray(conversation.messages) ? conversation.messages : [],
+    pinned: Boolean(conversation.pinned)
   };
 }
 
@@ -1174,6 +1225,7 @@ function createConversation(): Conversation {
     titleEdited: false,
     mode: "chat",
     messages: [],
+    pinned: false,
     createdAt: now,
     updatedAt: now
   };
@@ -1220,12 +1272,18 @@ function groupConversationsByDate(conversations: Conversation[]): Array<{ label:
   const startOfYesterday = startOfToday - 86_400_000;
   const sevenDaysAgo = startOfToday - 6 * 86_400_000;
 
+  const pinned: Conversation[] = [];
   const today: Conversation[] = [];
   const yesterday: Conversation[] = [];
   const week: Conversation[] = [];
   const older: Conversation[] = [];
 
   for (const conversation of conversations) {
+    if (conversation.pinned) {
+      pinned.push(conversation);
+      continue;
+    }
+
     const updated = new Date(conversation.updatedAt).getTime();
 
     if (updated >= startOfToday) {
@@ -1240,6 +1298,7 @@ function groupConversationsByDate(conversations: Conversation[]): Array<{ label:
   }
 
   return [
+    { label: "ピン留め", items: pinned },
     { label: "今日", items: today },
     { label: "昨日", items: yesterday },
     { label: "過去 7 日", items: week },

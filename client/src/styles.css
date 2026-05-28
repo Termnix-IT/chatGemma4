@@ -399,7 +399,7 @@ h2 {
 
 .conversation-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 30px 30px;
+  grid-template-columns: minmax(0, 1fr) 30px 30px 30px;
   gap: 4px;
   width: 100%;
   color: var(--sidebar-text-muted);
@@ -433,6 +433,7 @@ h2 {
 }
 
 .conversation-edit-button,
+.conversation-pin-button,
 .conversation-delete-button {
   display: inline-grid;
   width: 30px;
@@ -443,6 +444,12 @@ h2 {
   border-radius: var(--radius-md);
   color: var(--sidebar-text-soft);
   background: transparent;
+}
+
+.conversation-pin-button:hover,
+.conversation-pin-button.is-active {
+  color: var(--accent);
+  background: var(--sidebar-edit-button-hover);
 }
 
 .conversation-edit-button:hover {
@@ -457,16 +464,21 @@ h2 {
 
 @media (hover: hover) {
   .conversation-edit-button,
+  .conversation-pin-button,
   .conversation-delete-button {
     opacity: 0;
     transition: opacity var(--dur-base) var(--ease-standard);
   }
 
   .conversation-item:hover .conversation-edit-button,
+  .conversation-item:hover .conversation-pin-button,
   .conversation-item:hover .conversation-delete-button,
   .conversation-item.is-active .conversation-edit-button,
+  .conversation-item.is-active .conversation-pin-button,
   .conversation-item.is-active .conversation-delete-button,
+  .conversation-pin-button.is-active,
   .conversation-edit-button:focus-visible,
+  .conversation-pin-button:focus-visible,
   .conversation-delete-button:focus-visible {
     opacity: 1;
   }
@@ -1274,6 +1286,13 @@ h2 {
   font-weight: 700;
 }
 
+.field small {
+  color: var(--text-faint);
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.55;
+}
+
 .field input,
 .field textarea {
   width: 100%;
@@ -1304,6 +1323,10 @@ h2 {
 .tooling-note p {
   margin: 0;
   line-height: 1.55;
+}
+
+.tooling-note p + p {
+  margin-top: 8px;
 }
 
 .tool-list-panel {
