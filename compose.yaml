@@ -1,0 +1,12 @@
+services:
+  chatgemma:
+    build:
+      context: .
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: "3001"
+      OLLAMA_BASE_URL: "http://host.docker.internal:11434"
+      OLLAMA_MODEL: "gemma4:latest"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
